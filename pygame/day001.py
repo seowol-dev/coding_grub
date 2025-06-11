@@ -1,3 +1,5 @@
+# + 화면 경계 처리
+
 import pygame
 import sys
 
