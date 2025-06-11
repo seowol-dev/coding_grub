@@ -1,3 +1,5 @@
+# + 간단한 물리(가속도, 마찰력)
+
 import pygame
 import sys
 
