@@ -1,4 +1,4 @@
-# + 간단한 물리(가속도, 마찰력)
+# 플레이어 이미지 추가
 
 import pygame
 import sys
@@ -23,7 +23,8 @@ friction = 0.9      # 마찰, 속도를 조금씩 줄여주는 효과
 max_speed = 5       # 최대 속도
 pos_x = 200
 pos_y = 200
-circle_radius = 20  # 원의 반지름
+image_width = image.get_width()
+image_height = image.get_height()
 
 clock = pygame.time.Clock()
 
@@ -49,16 +50,17 @@ while True:
     pos_x += vel_x
     pos_y += vel_y
     
-    # 경계 체크: 원이 화면을 넘지 않도록 제한
-    if pos_x - circle_radius < 0:
-        pos_x = circle_radius  # 왼쪽 경계를 넘지 않도록
-    if pos_x + circle_radius > SCREEN_WIDTH:
-        pos_x = SCREEN_WIDTH - circle_radius  # 오른쪽 경계를 넘지 않도록
-    if pos_y - circle_radius < 0:
-        pos_y = circle_radius  # 위쪽 경계를 넘지 않도록
-    if pos_y + circle_radius > SCREEN_HEIGHT:
-        pos_y = SCREEN_HEIGHT - circle_radius  # 아래쪽 경계를 넘지 않도록
+    # 경계 체크: 이미지가 화면을 넘지 않도록 제한
+    if pos_x - image_width // 2 < 0:
+        pos_x = image_width // 2  # 왼쪽 경계를 넘지 않도록
+    if pos_x + image_width // 2 > SCREEN_WIDTH:
+        pos_x = SCREEN_WIDTH - image_width // 2  # 오른쪽 경계를 넘지 않도록
+    if pos_y - image_height // 2 < 0:
+        pos_y = image_height // 2  # 위쪽 경계를 넘지 않도록
+    if pos_y + image_height // 2 > SCREEN_HEIGHT:
+        pos_y = SCREEN_HEIGHT - image_height // 2  # 아래쪽 경계를 넘지 않도록
 
     screen.fill(black)
-    pygame.draw.circle(screen, white, (pos_x, pos_y), circle_radius)
+    # 이미지 그리기
+    screen.blit(image, (pos_x - image_width // 2, pos_y - image_height // 2))
     pygame.display.update()
