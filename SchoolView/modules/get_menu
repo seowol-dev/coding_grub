@@ -1,0 +1,130 @@
+import requests
+from bs4 import BeautifulSoup
+import re
+
+# ==== 상수 정의 ====
+BASE_URL = "https://www.goeyi.kr"
+MENU_PAGE_URL = f"{BASE_URL}/e-hyun-m/ad/fm/foodmenu/selectFoodMenuView.do"
+DETAIL_API_URL = f"{BASE_URL}/e-hyun-m/ad/fm/foodmenu/selectFoodData.do"
+SCHOOL_MENU_CODE = "2901"
+
+HEADERS = {
+    "accept": "*/*",
+    "accept-encoding": "gzip, deflate, br, zstd",
+    "accept-language": "ko,en-US;q=0.9,en;q=0.8,ja;q=0.7",
+    "connection": "keep-alive",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "host": "www.goeyi.kr",
+    "origin": BASE_URL,
+    "referer": f"{MENU_PAGE_URL}?mi={SCHOOL_MENU_CODE}",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    "x-requested-with": "XMLHttpRequest"
+}
+
+ALLERGY_DICT = {
+    "1": "난류", "2": "우유", "3": "메밀", "4": "땅콩", "5": "대두", "6": "밀", "7": "고등어",
+    "8": "게", "9": "새우", "10": "돼지고기", "11": "복숭아", "12": "토마토", "13": "아황산류",
+    "14": "호두", "15": "닭고기", "16": "쇠고기", "17": "오징어", "18": "조개류", "19": "잣"
+}
+
+DAY_LIST = ["일", "월", "화", "수", "목", "금", "토"]
+
+
+def fetch_meal_data(fmseq: str):
+    response = requests.post(DETAIL_API_URL, headers=HEADERS, data={"fmSeq": fmseq})
+    response.raise_for_status()
+    return response.json()
+
+
+def get_fmseq_list_from_html(school_code=SCHOOL_MENU_CODE):
+    url = f"{MENU_PAGE_URL}?mi={school_code}"
+    res = requests.get(url, headers=HEADERS)
+    res.raise_for_status()
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    thead_ths = soup.select("table thead tr th")[1:]
+    date_map = []
+    for th in thead_ths:
+        parts = th.get_text(separator=" ").strip().split()
+        date_map.append((parts[0], parts[1]) if len(parts) >= 2 else (None, None))
+
+    lunch_row = next((tr for tr in soup.select("table tbody tr")
+                      if tr.find("th", {"scope": "row"}) and "중식" in tr.text), None)
+    if lunch_row is None:
+        return []
+
+    tds = lunch_row.find_all("td")
+    fmseq_list = []
+
+    for i, td in enumerate(tds):
+        day, date = date_map[i] if i < len(date_map) else (None, None)
+        a_tag = td.find("a", onclick=True)
+        fmSeq = None
+        if a_tag:
+            match = re.search(r"fn_layer_pop_trigger2\(.*?'(\d+)'\)", a_tag["onclick"])
+            fmSeq = match.group(1) if match else None
+        fmseq_list.append({"day": day, "date": date, "fmSeq": fmSeq})
+
+    return fmseq_list
+
+
+def get_menu(day: str):
+    if day not in DAY_LIST:
+        raise ValueError(f"요일은 {DAY_LIST} 중 하나여야 합니다.")
+
+    fmseq_list = get_fmseq_list_from_html()
+    data = fmseq_list[DAY_LIST.index(day)]
+
+    if data["fmSeq"] is None:
+        return {"menu": [], "allergy": [], "date": data["date"], "day": data["day"]}
+
+    result = fetch_meal_data(data["fmSeq"])
+    lines = result["fmCn"].strip().split("\n")
+
+    menu_list = []
+    allergy_by_menu = []
+    current_allergies = []
+    total_allergies = set()
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # 줄 전체가 알러지 번호만으로 이루어진 경우
+        if re.fullmatch(r"(\d+\.)+", line):
+            current_allergies = line.strip(".").split(".")
+            if menu_list:
+                allergy_by_menu[-1].extend(current_allergies)
+            total_allergies.update(current_allergies)
+            continue
+
+        # 메뉴 + 알러지 번호가 같이 붙은 경우
+        match = re.match(r"^(.*?)(\d+(?:\.\d+)+)\.?$", line)
+        if match:
+            name = match.group(1).strip()
+            allergy_str = match.group(2)
+            allergy_nums = allergy_str.strip(".").split(".")
+            menu_list.append(name)
+            allergy_by_menu.append(allergy_nums)
+            total_allergies.update(allergy_nums)
+        else:
+            menu_list.append(line)
+            allergy_by_menu.append([])
+
+    allergy_numbers = sorted(total_allergies, key=int)
+    allergy_names = [ALLERGY_DICT[n] for n in allergy_numbers if n in ALLERGY_DICT]
+
+    return {
+        "menu": menu_list,
+        "allergy": allergy_numbers,
+        "allergy_names": allergy_names,
+        "date": data["date"],
+        "day": data["day"]
+    }
+
+
+if __name__ == "__main__":
+    day_input = input("급식정보 크롤링\n원하는 요일을 입력하세요 (예: 월): ").strip()
+    result = get_menu(day_input)
+    print(result)
