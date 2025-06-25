@@ -83,7 +83,6 @@ def get_menu(day: str):
 
     menu_list = []
     allergy_by_menu = []
-    current_allergies = []
     total_allergies = set()
 
     for line in lines:
@@ -91,28 +90,38 @@ def get_menu(day: str):
         if not line:
             continue
 
-        # 줄 전체가 알러지 번호만으로 이루어진 경우
-        if re.fullmatch(r"(\d+\.)+", line):
+        # 줄 전체가 알러지 번호만으로 이루어진 경우 (예: "1.2.3.")
+        if re.fullmatch(r"^\d+(?:\.\d+)*\.?$", line):
             current_allergies = line.strip(".").split(".")
-            if menu_list:
+            current_allergies = [a for a in current_allergies if a]  # 빈 문자열 제거
+            if menu_list and allergy_by_menu:
                 allergy_by_menu[-1].extend(current_allergies)
             total_allergies.update(current_allergies)
             continue
 
-        # 메뉴 + 알러지 번호가 같이 붙은 경우
-        match = re.match(r"^(.*?)(\d+(?:\.\d+)+)\.?$", line)
+        # 메뉴 명 뒤에 알러지 번호가 붙은 경우를 더 정확하게 분리
+        # 패턴: 메뉴명 + 숫자.숫자.숫자... 형태
+        match = re.match(r"^(.*?)(\d+(?:\.\d+)*\.?)$", line)
         if match:
-            name = match.group(1).strip()
-            allergy_str = match.group(2)
-            allergy_nums = allergy_str.strip(".").split(".")
-            menu_list.append(name)
-            allergy_by_menu.append(allergy_nums)
-            total_allergies.update(allergy_nums)
-        else:
-            menu_list.append(line)
-            allergy_by_menu.append([])
+            menu_name = match.group(1).strip()
+            allergy_str = match.group(2).strip(".")
+            
+            # 메뉴명이 비어있지 않은 경우에만 처리
+            if menu_name:
+                allergy_nums = allergy_str.split(".") if allergy_str else []
+                allergy_nums = [a for a in allergy_nums if a]  # 빈 문자열 제거
+                
+                menu_list.append(menu_name)
+                allergy_by_menu.append(allergy_nums)
+                total_allergies.update(allergy_nums)
+                continue
 
-    allergy_numbers = sorted(total_allergies, key=int)
+        # 메뉴명만 있는 경우 (알러지 번호 없음)
+        menu_list.append(line)
+        allergy_by_menu.append([])
+
+    # 알러지 번호를 숫자 순서로 정렬
+    allergy_numbers = sorted([a for a in total_allergies if a], key=lambda x: int(x) if x.isdigit() else 0)
     allergy_names = [ALLERGY_DICT[n] for n in allergy_numbers if n in ALLERGY_DICT]
 
     return {
@@ -127,4 +136,22 @@ def get_menu(day: str):
 if __name__ == "__main__":
     day_input = input("급식정보 크롤링\n원하는 요일을 입력하세요 (예: 월): ").strip()
     result = get_menu(day_input)
-    print(result)
+    
+    print(f"\n📅 {result['day']}요일 ({result['date']}) 중식 메뉴")
+    print("=" * 40)
+    
+    if result['menu']:
+        print("🍽️ 메뉴:")
+        for i, menu in enumerate(result['menu']):
+            print(f"  {i+1}. {menu}")
+        
+        print(f"\n⚠️ 알러지 정보:")
+        if result['allergy_names']:
+            print(f"  포함 알러지: {', '.join(result['allergy_names'])}")
+            print(f"  알러지 번호: {', '.join(result['allergy'])}")
+        else:
+            print("  알러지 정보 없음")
+    else:
+        print("급식 정보가 없습니다.")
+    
+    print(f"\n📊 전체 결과: {result}")
